@@ -243,6 +243,9 @@ function side() {
     <button class="lec-link" data-id="${l.id}" aria-current="${perLec && l.id === S.lec}">
       <span class="dot" style="background:${tint(i)}">${esc(l.no)}</span><span>${esc(l.title)}</span></button>`).join("");
   $("#side").querySelectorAll(".lec-link").forEach(b => b.onclick = () => go(perLec ? S.view : "note", b.dataset.id));
+  // mobile: the lecture list is a horizontal strip — keep the current one in view
+  const cur = $("#side [aria-current=true]");
+  if (cur) $("#side").scrollLeft = cur.offsetLeft - 16;
 }
 
 function render() {
