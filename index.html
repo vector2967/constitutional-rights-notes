@@ -206,12 +206,14 @@ const TINTS = ["--t-peach","--t-rose","--t-mint","--t-lav","--t-sky","--t-yel","
 const tint = i => `var(${TINTS[i % TINTS.length]})`;
 const $ = (s, el = document) => el.querySelector(s);
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const lno = l => esc(l.no) + (/^\d+$/.test(l.no) ? "강" : "");
 const store = {
   get(k, d) { try { const v = localStorage.getItem("hb:" + k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem("hb:" + k, JSON.stringify(v)); } catch {} }
 };
 const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
-const S = { view: "home", lec: L[0]?.id, sel: store.get("sel", L.map(l => l.id)) };
+const known = store.get("selIds", null);  // ids that existed when sel was saved; newly added lectures start selected
+const S = { view: "home", lec: L[0]?.id, sel: store.get("sel", L.map(l => l.id)).concat(known ? L.map(l => l.id).filter(id => !known.includes(id)) : []) };
 
 // theme
 const savedTheme = store.get("theme", null);
@@ -275,7 +277,7 @@ function home() {
     <h2>강의별 노트</h2>
     <div class="grid">${L.map((l, i) => `
       <button class="home-card" style="background:${tint(i)}" data-id="${l.id}">
-        <span>${esc(l.no)}강${l.date ? " · " + esc(l.date) : ""}</span><b>${esc(l.title)}</b>
+        <span>${lno(l)}${l.date ? " · " + esc(l.date) : ""}</span><b>${esc(l.title)}</b>
         <span>${esc(l.summary || "")}</span></button>`).join("")}</div>
     <p class="foot">학습 기록(오답·카드 진행)은 이 브라우저에만 저장됩니다.</p>`;
   $("#main").querySelectorAll(".home-card").forEach(b => b.onclick = () => go("note", b.dataset.id));
@@ -289,7 +291,7 @@ function home() {
       while (i >= 0 && n < 3) { hits.push({ l, s: text.slice(Math.max(0, i - 50), i + q.length + 70) }); i = text.indexOf(q, i + q.length); n++; }
     }
     $("#hits").innerHTML = hits.length ? hits.slice(0, 30).map(h => `
-      <div class="search-hit"><small>${esc(h.l.no)}강 ${esc(h.l.title)}</small>
+      <div class="search-hit"><small>${lno(h.l)} ${esc(h.l.title)}</small>
       <div>…${esc(h.s).replaceAll(esc(q), `<mark>${esc(q)}</mark>`)}…</div>
       <a href="#note/${h.l.id}">노트 열기 →</a></div>`).join("") : `<p class="empty">검색 결과 없음</p>`;
   };
@@ -300,7 +302,7 @@ function note() {
   const i = L.findIndex(l => l.id === S.lec), l = L[i];
   if (!l) { $("#main").innerHTML = `<p class="empty">데이터가 없습니다.</p>`; return; }
   $("#main").innerHTML = `
-    <div class="eyebrow">${esc(l.no)}강 ${l.date ? "· " + esc(l.date) : ""}</div>
+    <div class="eyebrow">${lno(l)} ${l.date ? "· " + esc(l.date) : ""}</div>
     <h1>${esc(l.title)}</h1>
     ${l.summary ? `<p class="lead">${esc(l.summary)}</p>` : ""}
     ${l.sources ? `<p class="meta">출처: ${esc(l.sources)}</p>` : ""}
@@ -327,7 +329,7 @@ function memo() {
   const l = L.find(l => l.id === S.lec);
   const hidden = store.get("memoHide", false);
   $("#main").innerHTML = `
-    <div class="eyebrow">암기노트 · ${esc(l.no)}강</div>
+    <div class="eyebrow">암기노트 · ${lno(l)}</div>
     <h1>${esc(l.title)}</h1>
     <div class="row" style="margin:16px 0">
       <button class="btn ${hidden ? "" : "sec"}" id="hideBtn">${hidden ? "가리기 켜짐 — 클릭해서 하나씩 확인" : "정답 가리기"}</button>
@@ -351,7 +353,7 @@ function bindPicker(after) {
   $("#chips").querySelectorAll(".chip").forEach(c => c.onclick = () => {
     if (c.dataset.all) S.sel = S.sel.length === L.length ? [] : L.map(l => l.id);
     else S.sel = S.sel.includes(c.dataset.id) ? S.sel.filter(x => x !== c.dataset.id) : [...S.sel, c.dataset.id];
-    store.set("sel", S.sel); after();
+    store.set("sel", S.sel); store.set("selIds", L.map(l => l.id)); after();
   });
 }
 
@@ -385,7 +387,7 @@ function fcPlay() {
   }
   const c = FC.deck[0];
   $("#main").innerHTML = `
-    <div class="row"><span class="pill">${esc(c.lec.no)}강 ${esc(c.lec.title)}</span><span style="flex:1"></span>
+    <div class="row"><span class="pill">${lno(c.lec)} ${esc(c.lec.title)}</span><span style="flex:1"></span>
       <span class="meta">완료 ${FC.done} / ${FC.total} · 남은 카드 ${FC.deck.length}</span></div>
     <div class="progress" style="margin-top:10px"><i style="width:${FC.total ? FC.done / FC.total * 100 : 0}%"></i></div>
     <div class="fc-stage"><div class="fc" id="fc" tabindex="0" role="button" aria-label="카드 뒤집기">
@@ -477,7 +479,7 @@ function qzPlay() {
   if (Z.i >= Z.list.length) return qzEnd();
   const q = Z.list[Z.i], answered = Z.picked !== null;
   $("#main").innerHTML = `
-    <div class="row"><span class="pill">${esc(q.lec.no)}강 ${esc(q.lec.title)}</span><span class="pill">${q.type === "ox" ? "OX" : "객관식"}</span>
+    <div class="row"><span class="pill">${lno(q.lec)} ${esc(q.lec.title)}</span><span class="pill">${q.type === "ox" ? "OX" : "객관식"}</span>
       <span style="flex:1"></span><span class="meta">${Z.i + 1} / ${Z.list.length} · 정답 ${Z.score}</span></div>
     <div class="progress" style="margin-top:10px"><i style="width:${Z.i / Z.list.length * 100}%"></i></div>
     <div class="q-box"><div class="q-text">${esc(q.q)}</div>
@@ -508,7 +510,7 @@ function qzEnd() {
     <div class="eyebrow">결과</div><h1>${Z.score} / ${Z.list.length} <span style="color:var(--steel);font-size:24px">(${pct}%)</span></h1>
     <p class="lead">${pct >= 90 ? "훌륭합니다. 오답만 한 번 더 확인하세요." : pct >= 70 ? "좋아요. 틀린 부분을 노트에서 다시 보세요." : "노트를 다시 읽고 오답 모드로 반복해 보세요."}</p>
     <div class="row" style="margin:16px 0"><button class="btn" id="again">새 시험</button></div>
-    ${Z.wrongs.length ? `<h2>틀린 문제</h2>` + Z.wrongs.map(q => `<div class="q-box"><span class="pill">${esc(q.lec.no)}강</span>
+    ${Z.wrongs.length ? `<h2>틀린 문제</h2>` + Z.wrongs.map(q => `<div class="q-box"><span class="pill">${lno(q.lec)}</span>
       <div class="q-text" style="margin-top:8px">${esc(q.q)}</div><div>정답: <b>${esc(q.opts.find(o => o.ok).t)}</b></div>
       <div class="explain">${q.explain || ""}</div><a href="#note/${q.lec.id}">노트에서 보기 →</a></div>`).join("") : ""}`;
   QZ = null;
